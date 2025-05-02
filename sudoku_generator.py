@@ -4,24 +4,41 @@ from gurobipy import *
 import numpy as np
 import sudoku_uniqueness_test as test
 import random
-
+import math
 
 def generate_starting_solution(n:int):
     # create a sudoku model with a random objective function
     m = Model()
-    root = int(n**0.5)
-    x = m.addVars(n,n,n,vtype=GRB.BINARY, name="x")
+    m.setParam("OutputFlag", 0)  # turn off solver output for cleaner output
+
+    # x[i, j, k] == 1 if cell (i, j) contains number k+1
+    x = m.addVars(n, n, n, vtype=GRB.BINARY)
+
+    # Each cell must contain exactly one number
     for i in range(n):
         for j in range(n):
-            m.addConstr(x.sum(i, j, '*') == 1) # jede Zelle enthält genau eine Zahl
-            m.addConstr(x.sum(i, '*', j) == 1) # jede Zeile enthält jede Zahl genau einmal
-            m.addConstr(x.sum('*', i, j) == 1) # jede Spalte enthält jede Zahl genau einmal
-    
-    # subsquare constraints
-    for i in range(root):
-        for j in range(root):
+            m.addConstr(x.sum(i, j, '*') == 1)
+
+    # Each number appears exactly once in each row and column
+    for i in range(n):
+        for k in range(n):
+            m.addConstr(x.sum(i, '*', k) == 1)  # row
+            m.addConstr(x.sum('*', i, k) == 1)  # column
+
+    # Each number appears exactly once in each subsquare
+    block_size = int(math.isqrt(n))
+
+    def cells_in_block(block_row, block_col):
+        for di in range(block_size):
+            for dj in range(block_size):
+                yield block_row * block_size + di, block_col * block_size + dj
+
+    for block_row in range(block_size):
+        for block_col in range(block_size):
             for k in range(n):
-                m.addConstr(sum(x[root*i+di, root*j+dj, k] for di in range(root) for dj in range(root)) == 1)
+                m.addConstr(
+                    quicksum(x[i, j, k] for i, j in cells_in_block(block_row, block_col)) == 1
+                )
 
     objective_coefficients = np.random.randint(1, 100, size=(n,n,n))
     m.setObjective(quicksum(objective_coefficients[i,j,k] * x[i,j,k] for i in range(n) for j in range(n) for k in range(n)), GRB.MAXIMIZE)
@@ -59,7 +76,7 @@ def reduce_solution(solution):
 def main():
     start = generate_starting_solution(9)
     sudoku = reduce_solution(start)
-    print("Sudoku:",sudoku)
+    print("Sudoku:  ",sudoku)
     print("Solution:", start)
 
 if __name__ == "__main__":
